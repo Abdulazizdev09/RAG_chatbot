@@ -20,14 +20,28 @@ interface Conversation {
     messages: Message[]
 }
 
+interface UploadedFile {
+    id: string
+    name: string
+    uploadedAt: string
+    status: "success" | "failed" | "partial" | "canceled"
+    chunksProcessed?: number
+    totalChunks?: number
+}
+
+type UploadStatus = "idle" | "uploading" | "processing" | "saving" | "completed" | "failed" | "canceled"
+
 const Home = () => {
     const [conversations, setConversations] = useState<Conversation[]>([])
     const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
     const [input, setInput] = useState("")
     const [isLoading, setIsLoading] = useState(false)
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
-    const [uploadLoading, setUploadLoading] = useState(false)
+    const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle")
+    const [uploadStatusText, setUploadStatusText] = useState("")
+    const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
     const messagesEndRef = useRef<HTMLDivElement>(null)
+    const uploadAbortControllerRef = useRef<AbortController | null>(null)
 
     // Load conversations from localStorage
     useEffect(() => {
@@ -41,12 +55,31 @@ const Home = () => {
         }
     }, [])
 
+    // Load uploaded files from localStorage
+    useEffect(() => {
+        const saved = localStorage.getItem("f1gpt_uploaded_files")
+        if (saved) {
+            try {
+                setUploadedFiles(JSON.parse(saved))
+            } catch (e) {
+                console.error("Failed to load uploaded files:", e)
+            }
+        }
+    }, [])
+
     // Save conversations to localStorage
     useEffect(() => {
         if (conversations.length > 0) {
             localStorage.setItem("f1gpt_conversations", JSON.stringify(conversations))
         }
     }, [conversations])
+
+    // Save uploaded files to localStorage
+    useEffect(() => {
+        if (uploadedFiles.length > 0) {
+            localStorage.setItem("f1gpt_uploaded_files", JSON.stringify(uploadedFiles))
+        }
+    }, [uploadedFiles])
 
     const activeConversation = conversations.find((c) => c.id === activeConversationId)
     const messages = activeConversation?.messages || []
@@ -162,35 +195,98 @@ const Home = () => {
     }
 
     const handleThemeToggle = () => {
-        // Note: In production, you'd use a proper theme context/provider
-        // For now, we rely on system preference (prefers-color-scheme CSS media query)
-        // Users can set their OS theme preference
         alert("Theme follows your system preference. Change it in your OS settings.")
     }
 
+    const handleUploadCancel = () => {
+        if (uploadAbortControllerRef.current) {
+            uploadAbortControllerRef.current.abort()
+            uploadAbortControllerRef.current = null
+            setUploadStatus("canceled")
+            setUploadStatusText("Upload canceled")
+            // Keep modal open briefly to show canceled state
+            setTimeout(() => {
+                setIsUploadModalOpen(false)
+                setUploadStatus("idle")
+                setUploadStatusText("")
+            }, 1500)
+        }
+    }
+
     const handleUpload = async (file: File) => {
-        setUploadLoading(true)
+        // Create abort controller for this upload
+        uploadAbortControllerRef.current = new AbortController()
+        const signal = uploadAbortControllerRef.current.signal
+
+        setUploadStatus("uploading")
+        setUploadStatusText("uploading")
+
         try {
             const formData = new FormData()
             formData.append("file", file)
 
+            setUploadStatusText("processing")
+
             const response = await fetch("/api/upload", {
                 method: "POST",
                 body: formData,
+                signal, // Pass abort signal
             })
 
-            if (response.ok) {
-                setIsUploadModalOpen(false)
-                // Show a brief notification (in a real app, use a toast library)
-                alert("FAQ uploaded successfully!")
-            } else {
-                alert("Upload failed. Please try again.")
+            // Check if request was aborted
+            if (signal.aborted) {
+                setUploadStatus("canceled")
+                setUploadStatusText("canceled")
+                return
             }
-        } catch (error) {
-            console.error("Upload error:", error)
-            alert("Upload error. Please try again.")
+
+            const data = await response.json()
+
+            if (response.ok) {
+                setUploadStatus("completed")
+                setUploadStatusText("completed")
+
+                // Add to file history
+                const uploadedFile: UploadedFile = {
+                    id: crypto.randomUUID(),
+                    name: file.name,
+                    uploadedAt: new Date().toISOString(),
+                    status: data.failedChunks && data.failedChunks.length > 0 ? "partial" : "success",
+                    chunksProcessed: data.chunksProcessed,
+                    totalChunks: data.totalChunks,
+                }
+                setUploadedFiles((prev) => [uploadedFile, ...prev])
+
+                // Close modal after a short delay
+                setTimeout(() => {
+                    setIsUploadModalOpen(false)
+                    setUploadStatus("idle")
+                    setUploadStatusText("")
+                }, 1500)
+            } else {
+                // Check for hibernation error
+                if (data.hibernating) {
+                    setUploadStatus("failed")
+                    setUploadStatusText(data.error || "Database is waking up. Please try again.")
+                } else {
+                    setUploadStatus("failed")
+                    setUploadStatusText(data.error || "Upload failed. Please try again.")
+                }
+
+                // Keep modal open for user to retry or cancel
+            }
+        } catch (error: any) {
+            // Check if abort error
+            if (error.name === "AbortError") {
+                setUploadStatus("canceled")
+                setUploadStatusText("canceled")
+            } else {
+                console.error("Upload error:", error)
+                setUploadStatus("failed")
+                setUploadStatusText("Network error. Please try again.")
+            }
         } finally {
-            setUploadLoading(false)
+            uploadAbortControllerRef.current = null
         }
     }
 
@@ -258,9 +354,22 @@ const Home = () => {
 
             <UploadModal
                 isOpen={isUploadModalOpen}
-                onClose={() => setIsUploadModalOpen(false)}
+                onClose={() => {
+                    // Allow closing even during upload
+                    if (uploadStatus === "canceled" || uploadStatus === "idle" || uploadStatus === "completed" || uploadStatus === "failed") {
+                        setIsUploadModalOpen(false)
+                        setUploadStatus("idle")
+                        setUploadStatusText("")
+                    } else {
+                        // Just close - the abort will be handled by cancel button
+                        setIsUploadModalOpen(false)
+                    }
+                }}
                 onUpload={handleUpload}
-                isLoading={uploadLoading}
+                onCancel={handleUploadCancel}
+                uploadStatus={uploadStatus}
+                uploadStatusText={uploadStatusText}
+                uploadedFiles={uploadedFiles}
             />
         </main>
     )
