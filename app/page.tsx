@@ -195,7 +195,8 @@ const Home = () => {
     }
 
     const handleThemeToggle = () => {
-        alert("Theme follows your system preference. Change it in your OS settings.")
+        // Theme toggle is now handled by ThemeProvider in Sidebar
+        // No action needed here
     }
 
     const handleUploadCancel = () => {
@@ -309,7 +310,7 @@ const Home = () => {
             <div className="chat-container">
                 <div className="chat-header">
                     <div className="logo-section">
-                        <Image src={f1GPTLogo} width={40} height={40} alt="f1GPT Logo" />
+                        <Image src={f1GPTLogo} width={40} height={40} alt="f1GPT Logo" style={{ width: 'auto', height: '40px' }} />
                         <span className="header-title">Formula 1 Q&A</span>
                     </div>
                 </div>
@@ -317,7 +318,7 @@ const Home = () => {
                 <section className="messages-section">
                     {noMessages ? (
                         <div className="empty-state">
-                            <Image src={f1GPTLogo} width={80} height={80} alt="f1GPT Logo" />
+                            <Image src={f1GPTLogo} width={80} height={80} alt="f1GPT Logo" style={{ width: 'auto', height: '80px' }} />
                             <h2 className="empty-state-title">Ask anything about F1</h2>
                             <p className="empty-state-subtitle">
                                 Get instant answers about drivers, teams, races, and more

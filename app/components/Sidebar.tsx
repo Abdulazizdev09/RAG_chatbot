@@ -1,6 +1,7 @@
 "use client"
 
 import React from "react"
+import { useTheme } from "./ThemeProvider"
 
 interface SidebarProps {
     onNewChat: () => void
@@ -19,6 +20,13 @@ const Sidebar: React.FC<SidebarProps> = ({
     chatHistory,
     activeChat,
 }) => {
+    const { theme, toggleTheme } = useTheme()
+
+    const handleThemeToggle = () => {
+        toggleTheme()
+        onThemeToggle()
+    }
+
     return (
         <aside className="sidebar">
             <div className="sidebar-header">
@@ -48,8 +56,14 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             <div className="sidebar-footer">
-                <button className="theme-toggle-button" onClick={onThemeToggle} title="Toggle theme">
-                    <span className="theme-toggle-icon">🌙</span>
+                <button 
+                    className="theme-toggle-button" 
+                    onClick={handleThemeToggle} 
+                    title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+                >
+                    <span className="theme-toggle-icon">
+                        {theme === "light" ? "🌙" : "☀️"}
+                    </span>
                 </button>
                 <button className="upload-button" onClick={onUploadClick} title="Upload FAQ">
                     📤 Upload FAQ
@@ -60,3 +74,4 @@ const Sidebar: React.FC<SidebarProps> = ({
 }
 
 export default Sidebar
+

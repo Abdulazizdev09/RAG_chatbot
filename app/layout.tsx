@@ -1,5 +1,6 @@
 import { title } from "process"
 import "./global.css"
+import { ThemeProvider } from "./components/ThemeProvider"
 
 export const metaData = {
     title: "F1GPT",
@@ -10,7 +11,9 @@ const RootLayout = ({ children }) => {
     return (
         <html lang="en" suppressHydrationWarning>
             <body>
-                {children}
+                <ThemeProvider>
+                    {children}
+                </ThemeProvider>
             </body>
         </html>
     )
